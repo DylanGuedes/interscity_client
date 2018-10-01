@@ -33,11 +33,13 @@ class connection():
                 raise Exception("Couldn't create capability {0}".format(title))
             else:
                 print("Capability {0} successfully created.".format(title))
+                return True
         else:
             print("Capability {0} already exist.".format(title))
+            return False
 
 
-    def register_resource(self, resource):
+    def _register_resource(self, resource):
         ENDPOINT = "/catalog/resources"
         response = requests.post(self.protocol + "://" + self.kong_host + ENDPOINT,
                 json={"data": resource})
@@ -49,14 +51,58 @@ class connection():
             return response.json()["data"]["uuid"]
 
 
-    def send_data(self, uuid, resource):
+    def _send_data(self, uuid, resource):
         ENDPOINT = "/adaptor/components/{0}/data".format(uuid)
         response = requests.post(self.protocol + "://" + self.kong_host + ENDPOINT,
                 json={"data": resource})
         if (response.status_code > 300):
             print("Couldn't send resource {0} data.".format(resource["uniq_key"]))
             print("Reason: {0}".format(response.text))
+        return response
+
+
+    def _get_data(self, uuid):
+        ENDPOINT = "/collector/resources/{0}/data".format(uuid)
+        response = requests.post(self.protocol + "://" + self.kong_host + ENDPOINT)
+        return response
+        print(response)
+        if (response.status_code > 300):
             return False
+        else:
+            return response.json()
+
+
+    def all_resources_uuid(self, capabilities=[]):
+        if (not capabilities):
+            ENDPOINT = "/catalog/resources"
+        else:
+            ENDPOINT = "/catalog/resources?" + ','.join(capabilities)
+        response = requests.get(self.protocol + "://" + self.kong_host + ENDPOINT)
+        resources = response.json()["resources"]
+        return list(map(lambda x: x["uuid"], resources))
+
+
+    def all_resources_description(self, capabilities=[]):
+        if (not capabilities):
+            ENDPOINT = "/catalog/resources"
+        else:
+            ENDPOINT = "/catalog/resources?" + ','.join(capabilities)
+        response = requests.get(self.protocol + "://" + self.kong_host + ENDPOINT)
+        resources = response.json()["resources"]
+        return list(map(lambda x: x["description"], resources))
+
+
+    def find_resource_uuid_using_uniq_id(self, uniq_id, capabilities=[]):
+        if (not capabilities):
+            ENDPOINT = "/catalog/resources"
+        else:
+            ENDPOINT = "/catalog/resources?" + ','.join(capabilities)
+        response = requests.get(self.protocol + "://" + self.kong_host + ENDPOINT)
+        resources = response.json()["resources"]
+        for resource in resources:
+            if (uniq_id in resource["description"]):
+                return resource["uuid"]
+        return False
 
 
 class resource_builder():
@@ -80,7 +126,7 @@ class resource_builder():
             print("Resource {0} registered locally...".format(resource["uniq_key"]))
             return SHOULD_REGISTER_REMOTELLY
 
-
+    
     def register_remotelly(self, resource):
         REQUIRED_ATTRS = ["description", "capabilities", "status", "lat", "lon"]
 
@@ -88,7 +134,7 @@ class resource_builder():
             if (not(attr in resource.keys())):
                 raise Exception("Missing {0} in resource.".format(attr))
 
-        r = self.connection.register_resource(resource)
+        r = self.connection._register_resource(resource)
         if (r != False):
             self.resources[resource["uniq_key"]]["uuid"] = r
             print("Resource {0} successfully registered.".format(resource["uniq_key"]))
@@ -107,17 +153,45 @@ class resource_builder():
             "status": "active"
         }
         if (self.register_locally(resource) == SHOULD_REGISTER_REMOTELLY):
-            self.register_remotelly(resource)
+            if (not self.exist_remotelly(uniq_key)):
+                self.register_remotelly(resource)
+            else:
+                print("Resource {0} exist remotelly.".format(uniq_key))
+                uuid = self.connection.find_resource_uuid_using_uniq_id(uniq_key)
+                self.resources[uniq_key]["uuid"] = uuid
 
 
-    def send_data(self, uniq_key, measure):
-        if (not uniq_key in self.resources.keys()):
-            print("Resource {0} not registered.".format(uniq_key))
-            raise ResourceDoesNotExistLocally(uniq_key)
+    def send_data(self, uniq_id, measure):
+        if (not uniq_id in self.resources.keys()):
+            print("Resource {0} not registered.".format(uniq_id))
+            raise ResourceDoesNotExistLocally(uniq_id)
         else:
-            if (not "uuid" in self.resources[uniq_key].keys()):
-                print("Resource {0} not registered remotelly.".format(uniq_key))
-                raise ResourceDoesNotExistRemotelly(uniq_key)
+            if (not "uuid" in self.resources[uniq_id].keys()):
+                uuid = self.connection.find_resource_uuid_using_uniq_id(uniq_id)
+                if (uuid == False):
+                    print("Resource {0} not registered remotelly.".format(uniq_id))
+                    raise ResourceDoesNotExistRemotelly(uniq_id)
+                else:
+                    self.resources[uniq_id]["uuid"] = uuid
             resource = {}
             resource[self.capability] = [measure]
-            self.connection.send_data(self.resources[uniq_key]["uuid"], resource)
+            return self.connection._send_data(self.resources[uniq_id]["uuid"], resource)
+
+
+    def exist_remotelly(self, uniq_key):
+        resources = self.connection.all_resources_description([self.capability])
+        return any(uniq_key in resource for resource in resources)
+
+
+    def get_data(self, uniq_key):
+        if (uniq_key not in self.resources.keys()):
+            raise ResourceDoesNotExistLocally(uniq_key)
+        else:
+            if ("uuid" not in self.resources[uniq_key].keys()):
+                uuid = self.connection.find_resource_uuid_using_uniq_id(uniq_key)
+                if (uuid == False):
+                    raise ResourceDoesNotExistRemotelly(uniq_key)
+                else:
+                    self.resources[uniq_key]["uuid"] = uuid
+        return self.connection._get_data(self.resources[uniq_key]["uuid"])
+

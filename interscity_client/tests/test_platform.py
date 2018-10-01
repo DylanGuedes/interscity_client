@@ -18,12 +18,12 @@ class TestPlatform(TestCase):
         conn = platform.connection()
         builder = platform.resource_builder(connection=conn,
             capability="temperature", uniq_key="region")
-        self.assertTrue("Pinheiros" not in builder.resources.keys())
+        self.assertTrue("PinheirosZZ" not in builder.resources.keys())
         with self.assertRaises(exceptions.ResourceDoesNotExistLocally):
-            builder.send_data("Pinheiros", {"temperature": 25})
+            builder.send_data("PinheirosZZ", {"temperature": 25})
         with self.assertRaises(exceptions.ResourceDoesNotExistRemotelly):
             resource = {
-                "uniq_key": "Pinheiros",
+                "uniq_key": "PinheirosZZ",
                 "description": "My sensor",
                 "capabilities": ["temperature"],
                 "lat": -23,
@@ -31,7 +31,7 @@ class TestPlatform(TestCase):
                 "status": "active"
             }
             builder.register_locally(resource)
-            builder.send_data("Pinheiros", {"temperature": 25})
+            builder.send_data("PinheirosZZ", {"temperature": 25})
 
 
     def test_resource_without_capability(self):
