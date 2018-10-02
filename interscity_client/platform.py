@@ -1,3 +1,4 @@
+import datetime
 import requests
 from interscity_client.exceptions import *
 
@@ -174,6 +175,8 @@ class resource_builder():
                 else:
                     self.resources[uniq_id]["uuid"] = uuid
             resource = {}
+            if not "date" in measure.keys():
+                measure["date"] = str(datetime.datetime.now())
             resource[self.capability] = [measure]
             return self.connection._send_data(self.resources[uniq_id]["uuid"], resource)
 
@@ -194,4 +197,3 @@ class resource_builder():
                 else:
                     self.resources[uniq_key]["uuid"] = uuid
         return self.connection._get_data(self.resources[uniq_key]["uuid"])
-
