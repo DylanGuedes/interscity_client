@@ -46,7 +46,12 @@ class connection():
         ENDPOINT = '/catalog/capabilities'
         response = requests.get(self.protocol + "://" + self.kong_host + ENDPOINT)
         capabilities = response.json()["capabilities"]
-        return any(capability["name"] == title for capability in capabilities)
+        if any(capability["name"] == title for capability in capabilities):
+            print("{0}Capability {1} exists.".format(bcolors.OKGREEN, title))
+            return True
+        else:
+            print("{0}Capability {1} does not exist.".format(bcolors.FAIL, title))
+            return False
 
 
     def create_capability(self, title, description, capability_type = "sensor"):
@@ -62,16 +67,15 @@ class connection():
             if (response.status_code > 300):
                 raise Exception("Couldn't create capability {0}".format(title))
             else:
-                print("Capability {0} successfully created.".format(title))
+                print("{0}Capability {1} successfully created.".format(bcolors.OKGREEN, title))
                 return True
         else:
-            print("Capability {0} already exist.".format(title))
+            print("{0}Capability {1} already exist.".format(bcolors.WARNING, title))
             return False
 
 
     def _register_resource(self, resource):
         ENDPOINT = "/catalog/resources"
-        print("Resource: {0}".format(resource))
         response = requests.post(self.protocol + "://" + self.kong_host + ENDPOINT,
                 json={"data": resource})
         if (response.status_code > 300):
@@ -84,7 +88,6 @@ class connection():
 
     def _send_data(self, uuid, resource):
         ENDPOINT = "/adaptor/components/{0}/data".format(uuid)
-        print("Resource: ", resource)
 
         response = requests.post(self.protocol + "://" + self.kong_host + ENDPOINT,
                 json={"data": resource})
@@ -97,8 +100,6 @@ class connection():
     def _get_data(self, uuid):
         ENDPOINT = "/collector/resources/{0}/data".format(uuid)
         response = requests.post(self.protocol + "://" + self.kong_host + ENDPOINT)
-        return response
-        print(response)
         if (response.status_code > 300):
             return False
         else:
@@ -138,17 +139,21 @@ class connection():
         return False
 
 
-    def find_resource_uuid_using_uniq_id_v2(self, uniq_id, capabilities=[]):
+    def find_resource_uuid_using_uniq_id_v2(self, uniq_id, capabilities, uniq_key):
         ENDPOINT = "/collector/resources/data/last"
         response = requests.post(self.protocol + "://" + self.kong_host + ENDPOINT,
-                json={"capabilities": [capabilities]})
+                json={"capabilities": capabilities})
         resources = response.json()["resources"]
-        possibilities = []
-        for u in capabilities:
-            possibilities.append("{0}={1}".format(u, uniq_id))
+
+        possibilities = ["{0}={1}".format(uniq_key, uniq_id)]
+
         for resource in resources:
-            if (resource["uniq-id"] and resource["uniq-id"] in possibilities):
-                return resource["uuid"]
+            for k, v in resource["capabilities"].items():
+                for measure in v:
+                    if ("uniq-id" in measure.keys()):
+                        for item in v:
+                            if (item["uniq-id"] in possibilities):
+                                return resource["uuid"]
         return False
 
 
@@ -163,7 +168,7 @@ class resource_builder():
     def register_locally(self, resource):
         if (resource["uniq_key"] in self.resources.keys()):
             print("Resource {0} already exist locally.".format(resource["uniq_key"]))
-            if ("uuid" in resources["uniq_key"].keys):
+            if ("uuid" in self.resources[resource["uniq_key"]].keys()):
                 return SHOULD_REGISTER_REMOTELLY
             else:
                 print("Resource {0} already exist remotelly.".format(resource["uniq_key"]))
@@ -188,6 +193,7 @@ class resource_builder():
         if (r != False):
             self.resources[resource["uniq_key"]]["uuid"] = r
             print("Resource {0} successfully registered.".format(resource["uniq_key"]))
+        self.send_data(resource["uniq_key"], {})
 
 
     def register(self, uniq_key, description, capabilities, lat=-23, lon=-46):
@@ -203,12 +209,13 @@ class resource_builder():
             "status": "active"
         }
         if (self.register_locally(resource) == SHOULD_REGISTER_REMOTELLY):
-            if (not self.exist_remotelly(uniq_key)):
+            if (not self.exist_remotelly(uniq_key, capabilities)):
                 self.register_remotelly(resource)
             else:
                 print("Resource {0} exist remotelly.".format(uniq_key))
-                uuid = self.connection.find_resource_uuid_using_uniq_id(uniq_key)
-                self.resources[uniq_key]["uuid"] = uuid
+                resource = self.connection.find_resource_uuid_using_uniq_id_v2(uniq_key, capabilities, self.uniq_key)
+                if (resource != False):
+                    print("Resource found! UUID: {0}".format(resource))
 
 
     def send_data(self, uniq_id, measure):
@@ -217,7 +224,7 @@ class resource_builder():
             raise ResourceDoesNotExistLocally(uniq_id)
         else:
             if (not "uuid" in self.resources[uniq_id].keys()):
-                uuid = self.connection.find_resource_uuid_using_uniq_id(uniq_id)
+                uuid = self.connection.find_resource_uuid_using_uniq_id_v2(uniq_id, [self.capability], self.uniq_key)
                 if (uuid == False):
                     print("Resource {0} not registered remotelly.".format(uniq_id))
                     raise ResourceDoesNotExistRemotelly(uniq_id)
@@ -229,12 +236,17 @@ class resource_builder():
                 measure["date"] = str(datetime.datetime.now())
             resource[self.capability] = [measure]
             resource[self.capability][0]["uniq-id"] = "{0}={1}".format(self.uniq_key, uniq_id)
-            return self.connection._send_data(self.resources[uniq_id]["uuid"], resource)
+            response = self.connection._send_data(self.resources[uniq_id]["uuid"], resource)
+            if (response.status_code != 201):
+                print("{0}Could not send data for resource {1}".format(bcolors.FAIL, uuid))
+                return False
+            else:
+                print("{0}Data sent for resource.".format(bcolors.OKGREEN))
+                return True
 
 
-    def exist_remotelly(self, uniq_key):
-        resources = self.connection.all_resources_description(self.capability)
-        return any(uniq_key in resource for resource in resources)
+    def exist_remotelly(self, uniq_key, capabilities):
+        return self.connection.find_resource_uuid_using_uniq_id_v2(uniq_key, capabilities, self.uniq_key) != False
 
 
     def get_data(self, uniq_key):
