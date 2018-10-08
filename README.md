@@ -68,3 +68,20 @@ True
 >>> temperature_builder.send_data(uniq_sensor, {"temperature": 25})
 >>> temperature_builder.send_data(uniq_sensor, {"temperature": 33})
 ```
+
+## Deploying new versions
+
+**To install:**
+```
+pip install . --user --upgrade
+```
+
+**To package:**
+```
+python setup.py sdist bdist_wheel
+```
+
+**To upload do pypi:**
+```
+twine upload dist/*
+```
