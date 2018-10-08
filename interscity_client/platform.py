@@ -73,31 +73,31 @@ class connection():
             return response.json()
 
 
-    def all_resources_uuid(self, capabilities=[]):
-        if (not capabilities):
-            ENDPOINT = "/catalog/resources"
+    def all_resources_uuid(self, capability=None):
+        if (capability):
+            ENDPOINT = "/discovery/resources?capability="+capability
         else:
-            ENDPOINT = "/catalog/resources?" + ','.join(capabilities)
+            ENDPOINT = "/catalog/resources"
         response = requests.get(self.protocol + "://" + self.kong_host + ENDPOINT)
         resources = response.json()["resources"]
         return list(map(lambda x: x["uuid"], resources))
 
 
-    def all_resources_description(self, capabilities=[]):
-        if (not capabilities):
-            ENDPOINT = "/catalog/resources"
+    def all_resources_description(self, capability=None):
+        if (capability):
+            ENDPOINT = "/discovery/resources?capability="+capability
         else:
-            ENDPOINT = "/catalog/resources?" + ','.join(capabilities)
+            ENDPOINT = "/catalog/resources"
         response = requests.get(self.protocol + "://" + self.kong_host + ENDPOINT)
         resources = response.json()["resources"]
         return list(map(lambda x: x["description"], resources))
 
 
-    def find_resource_uuid_using_uniq_id(self, uniq_id, capabilities=[]):
-        if (not capabilities):
-            ENDPOINT = "/catalog/resources"
+    def find_resource_uuid_using_uniq_id(self, uniq_id, capability=None):
+        if (capability):
+            ENDPOINT = "/discovery/resources?capability="+capability
         else:
-            ENDPOINT = "/catalog/resources?" + ','.join(capabilities)
+            ENDPOINT = "/catalog/resources"
         response = requests.get(self.protocol + "://" + self.kong_host + ENDPOINT)
         resources = response.json()["resources"]
         for resource in resources:

@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='interscity_client',
-      version='0.1',
+      version='0.2',
       description='InterSCity client',
       url='http://github.com/DylanGuedes/interscity_client',
       author='Dylan Guedes',
