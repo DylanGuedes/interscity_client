@@ -1,5 +1,8 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+interscity_client/__pycache__/
+*.pyc
+*.cpython-36.pyc
 *.py[cod]
 *$py.class
 
