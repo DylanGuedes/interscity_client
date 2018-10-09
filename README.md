@@ -1,6 +1,6 @@
 # InterSCity Client (for Python)
 
-## Installing
+## Installing (USE PYTHON3 FOR GODS SAKE)
 ```
 pip install interscity_client
 ```
